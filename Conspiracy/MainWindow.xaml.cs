@@ -16,6 +16,10 @@ using Accord.Video;
 using Accord.Video.FFMPEG;
 using System.Drawing;
 using System.Drawing.Imaging;
+using Accord.Audio;
+using Accord.DirectSound;
+using Accord.Audio.Formats;
+
 
 namespace Conspiracy
 {
@@ -28,12 +32,14 @@ namespace Conspiracy
         public MainWindow()
         {
             InitializeComponent();
-            recorder = new Recorder(0, 0, 1920, 1080);
+            
             State.Text = "No recording";
+            audioDevices.ItemsSource = new AudioDeviceCollection(AudioDeviceCategory.Capture);
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
+            recorder = new Recorder(0, 0, 1920, 1080, (AudioDeviceInfo)audioDevices.SelectedItem);
             recorder.StartRecord();
             State.Text = "Recording";
         }
@@ -49,36 +55,55 @@ namespace Conspiracy
     {
         ScreenCaptureStream captureStream;
         VideoFileWriter video;
+        AudioCaptureDevice audio;
+        WaveEncoder audioEncoder;
         bool isRecording;
-        public Recorder(int xlocation, int ylocation, int width, int height)
+        public Recorder(int xlocation, int ylocation, int width, int height, AudioDeviceInfo audioDevice)
         {
+            audioEncoder = new WaveEncoder(@"D:\Projects\test_audio.wav");
+            audio = new AudioCaptureDevice(audioDevice);
             captureStream = new ScreenCaptureStream(new System.Drawing.Rectangle(xlocation, ylocation, width, height));
             video = new VideoFileWriter();
+
+            audio.DesiredFrameSize = 4096;
+            audio.SampleRate = 44100;
+            audio.NewFrame += Audio_NewFrame;
+
+            captureStream.FrameInterval = 1;
+            captureStream.NewFrame += CaptureStream_NewFrame;
         }
+
+        private void CaptureStream_NewFrame(object sender, Accord.Video.NewFrameEventArgs eventArgs)
+        {
+            video.WriteVideoFrame(eventArgs.Frame);
+        }
+
+        private void Audio_NewFrame(object sender, Accord.Audio.NewFrameEventArgs e)
+        {
+            audioEncoder.Encode(e.Signal);
+        }
+
         public void StartRecord()
         {
-            if(!isRecording)
+            if (!isRecording)
             {
                 isRecording = true;
-                captureStream.NewFrame += CaptureStream_NewFrame;
-                captureStream.FrameInterval = 1;
-                video.Open(@"D:\Projects\test.mp4", 1920, 1080, new Accord.Math.Rational(24.0), VideoCodec.MPEG4);
+                video.Open(@"D:\Projects\new_test.mp4", 1920, 1080, new Accord.Math.Rational(60.0), VideoCodec.MPEG4);
                 captureStream.Start();
+                audio.Start();
             }
         }
-        public void StopRecord() 
+        public void StopRecord()
         {
             if (isRecording)
             {
                 isRecording = false;
                 captureStream.Stop();
+                audio.Stop();
                 System.Threading.Thread.Sleep(100);
                 video.Close();
             }
         }
-        private void CaptureStream_NewFrame(object sender, NewFrameEventArgs eventArgs)
-        {
-            video.WriteVideoFrame(eventArgs.Frame);
-        }
+
     }
 }
