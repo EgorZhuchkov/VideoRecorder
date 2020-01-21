@@ -19,6 +19,8 @@ using System.Drawing.Imaging;
 using Accord.Audio;
 using Accord.DirectSound;
 using Accord.Audio.Formats;
+using System.Diagnostics;
+using System.IO;
 
 
 namespace Conspiracy
@@ -51,8 +53,64 @@ namespace Conspiracy
         }
     }
 
+    //public class Recorder
+    //{
+    //    int height;
+    //    int width;
+    //    VideoFileWriter writer;
+    //    AudioCaptureDevice audioCapture;
+    //    ScreenCaptureStream screenCapture;
+
+    //    public Recorder(int xlocation, int ylocation, int width, int height, AudioDeviceInfo deviceInfo)
+    //    {
+    //        height = 1080;
+    //        width = 1920;
+    //        writer = new VideoFileWriter();
+
+    //        audioCapture = new AudioCaptureDevice(deviceInfo);
+    //        audioCapture.NewFrame += AudioCapture_NewFrame;
+
+
+    //        screenCapture = new ScreenCaptureStream(new System.Drawing.Rectangle(xlocation, ylocation, width, height));
+    //        screenCapture.NewFrame += ScreenCapture_NewFrame;
+
+    //    }
+    //    private void ScreenCapture_NewFrame(object sender, Accord.Video.NewFrameEventArgs eventArgs)
+    //    {
+    //        writer.WriteVideoFrame(eventArgs.Frame);
+    //    }
+
+    //    private void AudioCapture_NewFrame(object sender, Accord.Audio.NewFrameEventArgs e)
+    //    {
+    //        writer.WriteAudioFrame(e.Signal.RawData);
+    //    }
+
+    //    internal void StartRecord()
+    //    {
+    //        screenCapture.Start();
+    //        audioCapture.Start();
+
+    //        var path = @"D:\Projects\TEST.mp4";
+
+    //        int frameRate = 30;
+    //        int bitRate = 400000;
+    //        int audioBitrate = 320000;
+    //        int sampleRate = 44100;
+    //        int channels = 1;
+    //        writer.Open(path, 1920, 1080, frameRate, VideoCodec.H264, bitRate,
+    //        AudioCodec.MP3, audioBitrate, sampleRate, channels);
+    //    }
+
+    //    internal void StopRecord()
+    //    {
+    //        throw new NotImplementedException();
+    //    }
+    //}
+
     public class Recorder
     {
+        private long? StartTick;
+
         ScreenCaptureStream captureStream;
         VideoFileWriter video;
         AudioCaptureDevice audio;
@@ -75,7 +133,12 @@ namespace Conspiracy
 
         private void CaptureStream_NewFrame(object sender, Accord.Video.NewFrameEventArgs eventArgs)
         {
-            video.WriteVideoFrame(eventArgs.Frame);
+            long currentTick = DateTime.Now.Ticks;
+            StartTick = StartTick ?? currentTick;
+            var frameOffset = new TimeSpan(currentTick - StartTick.Value);
+
+            video.WriteVideoFrame(eventArgs.Frame, frameOffset);
+
         }
 
         private void Audio_NewFrame(object sender, Accord.Audio.NewFrameEventArgs e)
@@ -87,8 +150,9 @@ namespace Conspiracy
         {
             if (!isRecording)
             {
+                StartTick = null;
                 isRecording = true;
-                video.Open(@"D:\Projects\new_test.mp4", 1920, 1080, new Accord.Math.Rational(60.0), VideoCodec.MPEG4);
+                video.Open(@"D:\Projects\new_test.avi", 1920, 1080, new Accord.Math.Rational(60.0), VideoCodec.Default);
                 captureStream.Start();
                 audio.Start();
             }
@@ -102,8 +166,34 @@ namespace Conspiracy
                 audio.Stop();
                 System.Threading.Thread.Sleep(100);
                 video.Close();
+
+                mergeAudioAndVideo();
             }
         }
 
+        private void mergeAudioAndVideo()
+        {
+            File.Delete(@"D:\Projects\final_video.avi");
+            var path = @"D:\Projects\new_test.mp4";
+
+            Process process = new Process();
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.FileName = @"D:\Projects\ffmpeg.exe";
+            startInfo.UseShellExecute = false;
+            startInfo.CreateNoWindow = true;
+            //startInfo.Arguments = "-i \"" + App.DataPath + "temp.avi\" -i \"" + App.DataPath + "temp.wav\" -c:v copy -c:a copy -map 0:v:0 -map 1:a:0 \"" + App.DataPath + final_videoFileName + ".avi\"";
+            startInfo.Arguments = "-i \"" + @"D:\Projects\new_test.avi" + "\" -i \"" + @"D:\Projects\test_audio.wav" + "\" -c:v copy -c:a copy -map 0:v:0 -map 1:a:0 \"" + @"D:\Projects\final_video" + ".avi\"";
+
+            process.StartInfo = startInfo;
+            process.Start();
+            //process.WaitForExit();
+
+            //if (File.Exists(@"D:\Projects\final_video.avi"))
+            //{
+            //    File.Delete(@"D:\Projects\test_audio.wav");
+            //    File.Delete(@"D:\Projects\new_test.avi");
+            //}
+
+        }
     }
 }
